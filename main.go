@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"strings"
 
 	"github.com/gorilla/websocket"
 )
@@ -22,11 +23,12 @@ type gitter struct {
 
 // processMessage processes the message and returns a
 // any error it encounters during the message processing
-func (g *gitter) processMessage(msg string) (result []byte, err error) {
-	cmd := exec.Command("git", msg)
+func (g *gitter) processMessage(msgs ...string) (result []byte, err error) {
+	cmd := exec.Command("git", msgs...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
+	err = cmd.Run()
+	if err != nil {
 		fmt.Println(err)
 		return nil, err
 	}
@@ -48,18 +50,15 @@ func (g *gitter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for {
 		_, p, err := conn.ReadMessage()
 		if err != nil {
-			handleErr(err, " <- reading")
 			g.handleError(conn, "error reading the message: "+err.Error())
 		}
-		fmt.Println(string(p))
-		result, err := g.processMessage(string(p))
+		msgs := strings.Fields(string(p))
+		result, err := g.processMessage(msgs...)
 		if err != nil {
-			handleErr(err, " <- processing")
 			g.handleError(conn, err.Error())
 		}
 		err = g.writeMessage(conn, result)
 		if err != nil {
-			handleErr(err, " <- writing")
 			g.handleError(conn, err.Error())
 		}
 	}
