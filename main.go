@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	"fmt"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os/exec"
@@ -17,27 +17,53 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(_ *http.Request) bool { return true },
 }
 
-type gitter struct {
-	name string
+// commandType is a constant definition of allowed command types
+type commandType string
+
+const (
+	version commandType = "version"
+	history             = "history"
+	diff                = "diff"
+	branch              = "branch"
+)
+
+type gitter struct{ name string }
+
+// The Result type is composed of the type and
+// data produced by processMessage()
+type Result struct {
+	Typ  string
+	Data string
+}
+
+// JSON marshals returns the JSON value of result
+func (r Result) JSON() ([]byte, error) {
+	return json.Marshal(r)
 }
 
 // processMessage processes the message and returns a
 // any error it encounters during the message processing
 func (g *gitter) processMessage(msgs ...string) (result []byte, err error) {
-	cmd := exec.Command("git", msgs...)
+	//the first item in msgs is the type of message
+	var commands []string
+	if len(msgs) >= 1 {
+		commands = msgs[1:]
+	}
+	cmd := exec.Command("git", commands...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	err = cmd.Run()
 	if err != nil {
-		fmt.Println(err)
 		return nil, err
 	}
-	return out.Bytes(), nil
+	res := Result{msgs[0], out.String()}
+	return res.JSON()
 }
 
 func (g *gitter) writeMessage(conn *websocket.Conn, msg []byte) error {
-	return conn.WriteMessage(websocket.TextMessage, msg)
+	return conn.WriteJSON(msg)
 }
+
 func (g *gitter) handleError(conn *websocket.Conn, msg string) {
 	conn.WriteMessage(websocket.TextMessage, []byte(msg))
 }
@@ -47,6 +73,7 @@ func (g *gitter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		handleErr(err)
 	}
+
 	for {
 		_, p, err := conn.ReadMessage()
 		if err != nil {
@@ -62,6 +89,7 @@ func (g *gitter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			g.handleError(conn, err.Error())
 		}
 	}
+
 }
 
 // This example demonstrates a trivial echo server.
