@@ -1,8 +1,8 @@
 package main
 
 import (
-	"archive/zip"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -21,10 +21,6 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin:     func(_ *http.Request) bool { return true },
-}
-
-func zipper() {
-	_ = zip.Deflate
 }
 
 // The Gitter struct
@@ -149,15 +145,20 @@ func (g *Gitter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
-	// TODO(uz)
-	// use flags to set/get required data to run
-	// eg. URL, enableLog(bool)...
+	// todo(uz) - use flag for logging decision
+	url := flag.String("URL", ":5959", "The server URL")
+	flag.Parse()
 
 	// Logger
 	logger := &log.Logger{}
 
 	// ServeMux
 	mux := http.NewServeMux()
+
+	// serve static assets
+	// requires esc by github.com/mjibson/esc
+	mux.Handle("/", http.FileServer(FS(false)))
+	mux.Handle("/_nuxt/", http.FileServer(FS(false)))
 
 	// httpUpgrade Handler
 	mux.Handle("/echo", NewGitter("httpUpgrade", logger))
@@ -168,7 +169,7 @@ func main() {
 	})(NewGitter("http", logger)))
 
 	server := http.Server{
-		Addr:    ":12345",
+		Addr:    *url,
 		Handler: mux,
 	}
 
