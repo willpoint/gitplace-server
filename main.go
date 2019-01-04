@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"fmt"
 	"log"
 	"net/http"
 	"os/exec"
@@ -25,8 +24,7 @@ var upgrader = websocket.Upgrader{
 
 // The Gitter struct
 type Gitter struct {
-	Name   string
-	Logger *log.Logger
+	Name string
 }
 
 // The Result type is composed of the type and
@@ -43,10 +41,8 @@ type ReqBody struct {
 }
 
 // NewGitter sets up Gitter with the default
-func NewGitter(name string, logger *log.Logger) *Gitter {
-	logger.SetFlags(log.LUTC)
-	logger.SetPrefix(name + ": ")
-	return &Gitter{name, logger}
+func NewGitter(name string) *Gitter {
+	return &Gitter{name}
 }
 
 // processMessage processes the message and returns a
@@ -60,6 +56,7 @@ func (g *Gitter) processMessage(msgs ...string) (result interface{}, err error) 
 	cmd := exec.Command("git", commands...)
 	output, err := cmd.Output()
 	if err != nil {
+		log.Printf("error running: %v", cmd.Args)
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return nil, exitErr
 		}
@@ -102,13 +99,12 @@ func (g *Gitter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		res, err := g.processMessage(strings.Fields(command)...)
 
 		if err != nil {
-			fmt.Println(err)
-			g.handleHTTPError(w, err.Error())
+			g.handleHTTPError(w, command)
 			return
 		}
 		rr, err := json.Marshal(res)
 		if err != nil {
-			g.handleHTTPError(w, err.Error())
+			g.handleHTTPError(w, command)
 			return
 		}
 		w.Header().Set(headerContentType, headerApplicationJSON)
@@ -125,7 +121,7 @@ func (g *Gitter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for {
 		_, p, err := conn.ReadMessage()
 		if err != nil {
-			g.handleError(conn, "error reading the message: "+err.Error())
+			g.handleError(conn, "error reading message: "+err.Error())
 			return
 		}
 		msgs := strings.Fields(string(p))
@@ -149,9 +145,6 @@ func main() {
 	url := flag.String("URL", ":5959", "The server URL")
 	flag.Parse()
 
-	// Logger
-	logger := &log.Logger{}
-
 	// ServeMux
 	mux := http.NewServeMux()
 
@@ -161,12 +154,12 @@ func main() {
 	mux.Handle("/_nuxt/", http.FileServer(FS(false)))
 
 	// httpUpgrade Handler
-	mux.Handle("/echo", NewGitter("httpUpgrade", logger))
+	mux.Handle("/echo", NewGitter("httpUpgrade"))
 
 	// http-CORSEnabled Handler
 	mux.Handle("/command", AllowCors(CorsConfig{
 		AllowHeaders: []string{headerContentType},
-	})(NewGitter("http", logger)))
+	})(NewGitter("http")))
 
 	server := http.Server{
 		Addr:    *url,
@@ -180,8 +173,6 @@ func main() {
 
 func handleErr(err error, msg ...string) {
 	if err != nil {
-		log.SetPrefix("gitPlace: ")
-		log.SetFlags(log.Lshortfile | log.LUTC)
-		log.Println("an error occured: ", err, msg)
+		log.Println(err, msg)
 	}
 }
