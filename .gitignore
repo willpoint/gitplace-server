@@ -1,3 +1,4 @@
 gitPlace
 dist
 .DS_Store
+static.go
